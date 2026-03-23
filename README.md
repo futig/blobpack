@@ -23,11 +23,14 @@ go get github.com/futig/blobpack
 
 ### Writing records
 
+`Write` returns a `RecordLocation` with the byte offset and total length of the written record within the bundle. `WriteAll` returns a slice of locations in the same order as the input records.
+
 ```go
 package main
 
 import (
     "compress/gzip"
+    "fmt"
     "os"
 
     "github.com/futig/blobpack"
@@ -44,13 +47,25 @@ func main() {
         {Payload: []byte("world")},
     }
 
-    if err := w.WriteAll(records); err != nil {
+    locs, err := w.WriteAll(records)
+    if err != nil {
         panic(err)
+    }
+    for i, loc := range locs {
+        fmt.Printf("record %d: offset=%d length=%d\n", i, loc.Offset, loc.Length)
     }
 
     stats, _ := w.Close()
     // stats.RecordCount, stats.BytesWritten
 }
+```
+
+To write a single record:
+
+```go
+loc, err := w.Write(blobpack.Record{Payload: []byte("hello")})
+// loc.Offset — byte offset of the record in the bundle
+// loc.Length — total encoded size in bytes
 ```
 
 ### Reading records
@@ -135,3 +150,4 @@ type Decompressor interface {
 - `Writer` and `Reader` are not safe for concurrent use.
 - `Writer.Close` does **not** close the underlying `io.Writer`.
 - A corrupt or truncated record returns `blobpack.ErrCorrupt`.
+- `RecordLocation.Offset` and `RecordLocation.Length` refer to the full encoded record (length field + compressed payload + CRC32), so `bundle[loc.Offset : loc.Offset+loc.Length]` is a valid self-contained record that can be passed directly to `NewReader`.
