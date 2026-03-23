@@ -12,7 +12,7 @@ func writeRecords(t *testing.T, compressor Compressor, records []Record) []byte 
 	var buf bytes.Buffer
 	w := NewWriter(&buf, compressor)
 	for _, r := range records {
-		if err := w.Write(r); err != nil {
+		if _, err := w.Write(r); err != nil {
 			t.Fatalf("Write: %v", err)
 		}
 	}

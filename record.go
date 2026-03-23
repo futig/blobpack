@@ -11,3 +11,11 @@ type WriteStats struct {
 	RecordCount  int
 	BytesWritten int64
 }
+
+// RecordLocation describes where a record was written within the bundle.
+// Offset is the byte offset of the record's first byte (the length field).
+// Length is the total encoded size of the record in bytes.
+type RecordLocation struct {
+	Offset int64
+	Length int64
+}

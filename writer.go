@@ -20,6 +20,7 @@ type Writer struct {
 	compressor Compressor
 	stats      WriteStats
 	buf        bytes.Buffer // reused compression scratch buffer
+	offset     int64
 	closed     bool
 }
 
@@ -41,14 +42,18 @@ func NewWriter(w io.Writer, compressor Compressor) *Writer {
 //
 // length covers everything after itself.
 // crc32 covers the compressed payload bytes.
-func (w *Writer) Write(record Record) error {
+// Write encodes r into the binary record format and writes it to the
+// underlying writer in a single Write call.
+// Returns a RecordLocation describing the offset and total byte length of the
+// written record within the bundle.
+func (w *Writer) Write(record Record) (RecordLocation, error) {
 	if w.closed {
-		return ErrWriterClosed
+		return RecordLocation{}, ErrWriterClosed
 	}
 
 	w.buf.Reset()
 	if err := w.compressor.Compress(&w.buf, bytes.NewReader(record.Payload)); err != nil {
-		return fmt.Errorf("record-zipper: compression failed: %w", err)
+		return RecordLocation{}, fmt.Errorf("record-zipper: compression failed: %w", err)
 	}
 	compressedPayload := w.buf.Bytes()
 
@@ -62,22 +67,29 @@ func (w *Writer) Write(record Record) error {
 
 	n, err := w.w.Write(assembled)
 	if err != nil {
-		return fmt.Errorf("record-zipper: write failed: %w", err)
+		return RecordLocation{}, fmt.Errorf("record-zipper: write failed: %w", err)
 	}
 
+	loc := RecordLocation{Offset: w.offset, Length: int64(n)}
+	w.offset += int64(n)
 	w.stats.BytesWritten += int64(n)
 	w.stats.RecordCount++
-	return nil
+	return loc, nil
 }
 
-// WriteAll writes each record in records. Returns on the first error.
-func (w *Writer) WriteAll(records []Record) error {
+// WriteAll writes each record in records and returns a slice of RecordLocations
+// in the same order as the input. Returns a partial result and the error on
+// the first failure.
+func (w *Writer) WriteAll(records []Record) ([]RecordLocation, error) {
+	locs := make([]RecordLocation, 0, len(records))
 	for _, r := range records {
-		if err := w.Write(r); err != nil {
-			return err
+		loc, err := w.Write(r)
+		if err != nil {
+			return locs, err
 		}
+		locs = append(locs, loc)
 	}
-	return nil
+	return locs, nil
 }
 
 // Close marks the writer as closed and returns accumulated write statistics.

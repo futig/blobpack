@@ -2,6 +2,7 @@ package blobpack
 
 import (
 	"bytes"
+	"compress/gzip"
 	"errors"
 	"io"
 	"testing"
@@ -13,7 +14,7 @@ func TestWriteSingleRecord(t *testing.T) {
 	w := NewWriter(&buf, NoopCompressor{})
 
 	rec := Record{Payload: []byte("hello")}
-	if err := w.Write(rec); err != nil {
+	if _, err := w.Write(rec); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
 
@@ -59,7 +60,7 @@ func TestWriteMultipleRecords(t *testing.T) {
 		{Payload: []byte("third")},
 	}
 	for _, r := range records {
-		if err := w.Write(r); err != nil {
+		if _, err := w.Write(r); err != nil {
 			t.Fatalf("Write: %v", err)
 		}
 	}
@@ -76,13 +77,42 @@ func TestWriteMultipleRecords(t *testing.T) {
 	}
 }
 
+func TestRecordLocationIsolation(t *testing.T) {
+	var buf bytes.Buffer
+	w := NewWriter(&buf, GzipCompressor{Level: gzip.BestCompression})
+
+	records := []Record{
+		{Payload: []byte("first")},
+		{Payload: []byte("second")},
+		{Payload: []byte("third")},
+	}
+	locs, err := w.WriteAll(records)
+	if err != nil {
+		t.Fatalf("WriteAll: %v", err)
+	}
+
+	bundle := buf.Bytes()
+
+	for i, loc := range locs {
+		slice := bundle[loc.Offset : loc.Offset+loc.Length]
+		r := NewReader(bytes.NewReader(slice), GzipDecompressor{})
+		rec, err := r.Read()
+		if err != nil {
+			t.Fatalf("[%d] Read from isolated slice: %v", i, err)
+		}
+		if !bytes.Equal(rec.Payload, records[i].Payload) {
+			t.Errorf("[%d] Payload = %q, want %q", i, rec.Payload, records[i].Payload)
+		}
+	}
+}
+
 func TestWriteEmptyPayload(t *testing.T) {
 	var buf bytes.Buffer
 	w := NewWriter(&buf, NoopCompressor{})
-	if err := w.Write(Record{Payload: nil}); err != nil {
+	if _, err := w.Write(Record{Payload: nil}); err != nil {
 		t.Fatalf("Write with nil payload: %v", err)
 	}
-	if err := w.Write(Record{Payload: []byte{}}); err != nil {
+	if _, err := w.Write(Record{Payload: []byte{}}); err != nil {
 		t.Fatalf("Write with empty payload: %v", err)
 	}
 }
@@ -93,7 +123,7 @@ func TestWriteAfterClose(t *testing.T) {
 	if _, err := w.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
-	if err := w.Write(Record{Payload: []byte("y")}); !errors.Is(err, ErrWriterClosed) {
+	if _, err := w.Write(Record{Payload: []byte("y")}); !errors.Is(err, ErrWriterClosed) {
 		t.Errorf("Write after Close: got %v, want ErrWriterClosed", err)
 	}
 }
@@ -111,7 +141,7 @@ func TestCloseIdempotent(t *testing.T) {
 
 func TestWriteErrorPropagation(t *testing.T) {
 	w := NewWriter(errorWriter{}, NoopCompressor{})
-	err := w.Write(Record{Payload: []byte("y")})
+	_, err := w.Write(Record{Payload: []byte("y")})
 	if err == nil {
 		t.Fatal("expected error from underlying writer, got nil")
 	}
@@ -120,7 +150,7 @@ func TestWriteErrorPropagation(t *testing.T) {
 func TestWriterWithGzip(t *testing.T) {
 	var buf bytes.Buffer
 	w := NewWriter(&buf, GzipCompressor{Level: -1})
-	if err := w.Write(Record{Payload: []byte("compressed data")}); err != nil {
+	if _, err := w.Write(Record{Payload: []byte("compressed data")}); err != nil {
 		t.Fatalf("Write with gzip: %v", err)
 	}
 	if buf.Len() == 0 {
