@@ -138,12 +138,22 @@ type Decompressor interface {
 
 ## Built-in compressors
 
-| Type                  | Description                          |
-|-----------------------|--------------------------------------|
-| `NoopCompressor`      | No compression (pass-through)        |
-| `NoopDecompressor`    | No decompression (pass-through)      |
-| `GzipCompressor`      | gzip with configurable level         |
-| `GzipDecompressor`    | gzip decompression                   |
+| Type                  | Description                                              |
+|-----------------------|----------------------------------------------------------|
+| `NoopCompressor`      | No compression (pass-through)                            |
+| `NoopDecompressor`    | No decompression (pass-through)                          |
+| `GzipCompressor`      | gzip with configurable `Level`                           |
+| `GzipDecompressor`    | gzip decompression with configurable `MaxBytes` limit    |
+
+`GzipDecompressor.MaxBytes` caps the size of the decompressed output to guard against decompression bombs. Defaults to 256 MiB when zero.
+
+```go
+// default limit (256 MiB)
+r := blobpack.NewReader(f, blobpack.GzipDecompressor{})
+
+// custom limit
+r := blobpack.NewReader(f, blobpack.GzipDecompressor{MaxBytes: 64 << 20}) // 64 MiB
+```
 
 ## Notes
 

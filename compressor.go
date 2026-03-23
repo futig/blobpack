@@ -52,15 +52,25 @@ func (g GzipCompressor) Compress(dst io.Writer, src io.Reader) error {
 	return gz.Close()
 }
 
-// GzipDecompressor decompresses gzip-encoded data.
-type GzipDecompressor struct{}
+const defaultMaxDecompressedBytes = 256 << 20 // 256 MiB
 
-func (GzipDecompressor) Decompress(dst io.Writer, src io.Reader) error {
+// GzipDecompressor decompresses gzip-encoded data.
+// MaxBytes limits the size of the decompressed output to guard against
+// decompression bombs. If zero, defaults to 256 MiB.
+type GzipDecompressor struct {
+	MaxBytes int64
+}
+
+func (g GzipDecompressor) Decompress(dst io.Writer, src io.Reader) error {
 	gz, err := gzip.NewReader(src)
 	if err != nil {
 		return err
 	}
 	defer gz.Close()
-	_, err = io.Copy(dst, gz)
+	limit := g.MaxBytes
+	if limit == 0 {
+		limit = defaultMaxDecompressedBytes
+	}
+	_, err = io.Copy(dst, io.LimitReader(gz, limit))
 	return err
 }

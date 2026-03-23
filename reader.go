@@ -28,7 +28,7 @@ func NewReader(r io.Reader, decompressor Decompressor) *Reader {
 // ReadAll reads all records until EOF and returns them as a slice.
 // Returns a partial result and the error if any record fails to decode.
 func (r *Reader) ReadAll() ([]Record, error) {
-	var records []Record
+	records := make([]Record, 0, 8)
 	for {
 		rec, err := r.Read()
 		if errors.Is(err, io.EOF) {

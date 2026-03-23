@@ -25,7 +25,7 @@ func writeRecords(t *testing.T, compressor Compressor, records []Record) []byte 
 func readAllRecords(t *testing.T, data []byte, decompressor Decompressor) []Record {
 	t.Helper()
 	r := NewReader(bytes.NewReader(data), decompressor)
-	var result []Record
+	result := make([]Record, 0, 8)
 	for {
 		rec, err := r.Read()
 		if errors.Is(err, io.EOF) {
